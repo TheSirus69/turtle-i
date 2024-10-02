@@ -155,6 +155,8 @@ const TurtleInternet = () => {
   return (
     <div className={`min-h-screen flex flex-col ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gradient-to-b from-teal-50 to-teal-100'}`}>
       <header className={`${isDarkMode ? 'bg-gray-800' : 'bg-teal-600'} text-white p-4 shadow-md`}>
+      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3235385359348292"
+      crossorigin="anonymous"></script>
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Turtle size={32} />
@@ -260,8 +262,6 @@ const TurtleInternet = () => {
           </div>
         </div>
       </footer>
-      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3235385359348292"
-     crossorigin="anonymous"></script>
 
       {currentGame && (
         <GamePopup 
