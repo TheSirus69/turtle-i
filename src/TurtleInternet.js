@@ -244,16 +244,16 @@ const TurtleInternet = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 mb-4 md:mb-0">
-              <a href="#" className={`hover:text-teal-200 transition-colors flex items-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-600'} px-3 py-1 rounded`}>
+              <a href="https://github.com/TheSirus69/turtle-i" className={`hover:text-teal-200 transition-colors flex items-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-600'} px-3 py-1 rounded`}>
                 <Github className="mr-2" size={20} />
                 GitHub
               </a>
-              <a href="#" className={`hover:text-teal-200 transition-colors ${isDarkMode ? 'bg-gray-700' : 'bg-gray-600'} px-3 py-1 rounded`}>
+              <a href="https://buymeacoffee.com/thesirus69" className={`hover:text-teal-200 transition-colors ${isDarkMode ? 'bg-gray-700' : 'bg-gray-600'} px-3 py-1 rounded`}>
                 Support the Project
               </a>
             </div>
             <div>
-              <a href="#" className={`hover:text-teal-200 transition-colors ${isDarkMode ? 'bg-gray-700' : 'bg-gray-600'} px-3 py-1 rounded`}>
+              <a href="https://forms.gle/j8jdAKeeEyZZPjQd6" className={`hover:text-teal-200 transition-colors ${isDarkMode ? 'bg-gray-700' : 'bg-gray-600'} px-3 py-1 rounded`}>
                 Suggest a Game
               </a>
             </div>
