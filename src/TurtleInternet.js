@@ -1,11 +1,12 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable jsx-a11y/anchor-is-valid */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { collection, query, orderBy, limit, startAfter, getDocs, where, updateDoc, doc, increment } from 'firebase/firestore';
 import { db } from './firebase';
 import { Turtle, Search, ChevronDown, Github, Sun, Moon, Lock, X } from 'lucide-react';
 import AdminLogin from './AdminLogin';
 import AdminPage from './AdminPage';
+
+const GAMES_PER_PAGE = 12;
 
 const GameCard = ({ game, isDarkMode, onPlay }) => (
   <div className="group cursor-pointer" onClick={() => onPlay(game)}>
@@ -53,78 +54,78 @@ const TurtleInternet = () => {
   const [games, setGames] = useState([]);
   const [currentGame, setCurrentGame] = useState(null);
   const [lastVisible, setLastVisible] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [categories, setCategories] = useState([]);
+  const [categories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
 
-  const fetchGames = async () => {
+  const fetchGames = useCallback(async (loadMore = false) => {
     setLoading(true);
-    const gamesCollection = collection(db, 'games');
-    let q;
-    
-    if (selectedCategory) {
-      q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), limit(10));
-    } else {
-      q = query(gamesCollection, orderBy(sortOption, 'desc'), limit(10));
-    }
-
     try {
+      const gamesCollection = collection(db, 'games');
+      let q;
+
+      if (selectedCategory) {
+        if (loadMore && lastVisible) {
+          q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(GAMES_PER_PAGE));
+        } else {
+          q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), limit(GAMES_PER_PAGE));
+        }
+      } else {
+        if (loadMore && lastVisible) {
+          q = query(gamesCollection, orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(GAMES_PER_PAGE));
+        } else {
+          q = query(gamesCollection, orderBy(sortOption, 'desc'), limit(GAMES_PER_PAGE));
+        }
+      }
+
       const snapshot = await getDocs(q);
       const fetchedGames = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-      setGames(fetchedGames);
+
+      if (loadMore) {
+        setGames(prevGames => [...prevGames, ...fetchedGames]);
+      } else {
+        setGames(fetchedGames);
+      }
+
       setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === 10);
+      setHasMore(snapshot.docs.length === GAMES_PER_PAGE);
     } catch (error) {
       console.error("Error fetching games:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategory, sortOption, lastVisible]);
+
+  useEffect(() => {
+    fetchGames();
+  }, [fetchGames, selectedCategory, sortOption]);
+
 
   const fetchMoreGames = async () => {
-    if (!lastVisible) return;
+    if (!lastVisible || loading) return;
     setLoading(true);
-    const gamesCollection = collection(db, 'games');
-    let q;
-    
-    if (selectedCategory) {
-      q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(10));
-    } else {
-      q = query(gamesCollection, orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(10));
-    }
-
     try {
+      const gamesCollection = collection(db, 'games');
+      let q;
+      
+      if (selectedCategory) {
+        q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(12));
+      } else {
+        q = query(gamesCollection, orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(12));
+      }
+
       const snapshot = await getDocs(q);
       const fetchedGames = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
       setGames(prevGames => [...prevGames, ...fetchedGames]);
       setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === 10);
+      setHasMore(snapshot.docs.length === 12);
     } catch (error) {
       console.error("Error fetching more games:", error);
     } finally {
       setLoading(false);
     }
   };
-
-  const fetchCategories = async () => {
-    const categoriesCollection = collection(db, 'categories');
-    try {
-      const snapshot = await getDocs(categoriesCollection);
-      const fetchedCategories = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-      setCategories(fetchedCategories);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  useEffect(() => {
-    fetchGames();
-  }, [fetchGames, selectedCategory, sortOption]);
 
   const handlePlayGame = async (game) => {
     setCurrentGame(game);
@@ -209,35 +210,30 @@ const TurtleInternet = () => {
             >
               <option value="">All Categories</option>
               {categories.map(category => (
-                <option key={category.id} value={category.name}>{category.name}</option>
+                <option key={category} value={category}>{category}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           </div>
         </div>
 
-        {loading && games.length === 0 ? (
-          <p className="text-center mt-4">Loading...</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredGames.map((game) => (
-                <GameCard 
-                  key={game.id} 
-                  game={game}
-                  isDarkMode={isDarkMode} 
-                  onPlay={handlePlayGame}
-                />
-              ))}
-            </div>
-            
-            {hasMore && (
-              <button onClick={fetchMoreGames} className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mx-auto block">
-                Load More
-              </button>
-            )}
-          </>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredGames.map((game) => (
+            <GameCard 
+              key={game.id} 
+              game={game}
+              isDarkMode={isDarkMode} 
+              onPlay={handlePlayGame}
+            />
+          ))}
+        </div>
+        
+        {hasMore && !loading && (
+          <button onClick={fetchMoreGames} className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mx-auto block">
+            Load More
+          </button>
         )}
+        {loading && <p className="text-center mt-4">Loading...</p>}
       </main>
 
       <footer className={`${isDarkMode ? 'bg-gray-800' : 'bg-[#9E9E9E]'} text-white py-6`}>
