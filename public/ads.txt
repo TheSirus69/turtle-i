@@ -3,6 +3,7 @@ improvedigital.com, 545_27802, DIRECT
 improvedigital.com, 545, RESELLER
 google.com, pub-1313834454494130, RESELLER, f08c47fec0942fa0
 google.com, pub-2316275586951220, RESELLER, f08c47fec0942fa0
+google.com, pub-3235385359348292, DIRECT, f08c47fec0942fa0
 appnexus.com, 9994, RESELLER, f5ab79cb980f11d1
 pubmatic.com, 156946, RESELLER, 5d62403b186f2ace
 triplelift.com, 9268, RESELLER, 6c33edb13117fd86
