@@ -95,7 +95,12 @@ const AdminPage = ({ setIsAdmin, isDarkMode }) => {
   const handleInputChange = (e, isEditing = false) => {
     const { name, value } = e.target;
     if (isEditing) {
-      setEditingGame({ ...editingGame, [name]: value });
+      setEditingGame(prev => ({
+        ...prev,
+        [name]: name === 'categories' && Array.isArray(prev.categories)
+          ? value
+          : value
+      }));
     } else {
       setNewGame({ ...newGame, [name]: value });
     }
@@ -132,7 +137,11 @@ const AdminPage = ({ setIsAdmin, isDarkMode }) => {
     try {
       const updatedGame = {
         ...editingGame,
-        categories: editingGame.categories.split(',').map(cat => cat.trim())
+        categories: Array.isArray(editingGame.categories)
+          ? editingGame.categories
+          : typeof editingGame.categories === 'string'
+            ? editingGame.categories.split(',').map(cat => cat.trim())
+            : []
       };
       await updateDoc(doc(db, 'games', editingGame.id), updatedGame);
       setSuccess('Game updated successfully!');
