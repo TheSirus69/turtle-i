@@ -4,8 +4,15 @@ module.exports = {
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      rotate: {
+        'y-6': '2deg',
+      },
+      scale: {
+        '105': '1.05',
+        '110': '1.10',
+      },
+    },
   },
   plugins: [],
 }
-

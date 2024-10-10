@@ -1,49 +1,18 @@
-/* eslint-disable jsx-a11y/anchor-is-valid */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, orderBy, limit, startAfter, getDocs, where, updateDoc, doc, increment } from 'firebase/firestore';
+import { getStorage, ref, getDownloadURL } from "firebase/storage";
 import { db } from './firebase';
-import { Turtle, Search, ChevronDown, Github, Sun, Moon, Lock, X } from 'lucide-react';
+import { Turtle, Search, Github, Sun, Moon, Lock, Info } from 'lucide-react';
+import InfiniteScroll from 'react-infinite-scroll-component';
 import AdminLogin from './AdminLogin';
 import AdminPage from './AdminPage';
+import GameDetails from './GameDetails';
+import AboutPage from './AboutPage';
+import GameCard from './GameCard';
+import Dropdown from './Dropdown';
+import GamePopup from './GamePopup';
 
 const GAMES_PER_PAGE = 12;
-
-const GameCard = ({ game, isDarkMode, onPlay }) => (
-  <div className="group cursor-pointer" onClick={() => onPlay(game)}>
-    <div className={`${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white'} rounded-lg shadow-md overflow-hidden transform transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl`}>
-      <img src={game.imageUrl} alt={game.name} className="w-full h-48 object-cover" />
-      <div className="p-4">
-        <h3 className="text-lg font-semibold text-center">{game.name}</h3>
-        <p className="text-center mt-2">Popularity: {game.popularity}</p>
-        {game.categories.map(category => (
-          <span key={category} className="inline-block bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700 mr-2 mb-2">
-            {category}
-          </span>
-        ))}
-      </div>
-    </div>
-  </div>
-);
-
-const GamePopup = ({ game, onClose, isDarkMode }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className={`relative w-11/12 h-5/6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl`}>
-      <button
-        onClick={onClose}
-        className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-        aria-label="Close"
-      >
-        <X size={24} />
-      </button>
-      <iframe
-        src={game.gameUrl || 'about:blank'}
-        title={game.name}
-        className="w-full h-full rounded-lg"
-        allowFullScreen
-      ></iframe>
-    </div>
-  </div>
-);
 
 const TurtleInternet = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,15 +25,32 @@ const TurtleInternet = () => {
   const [lastVisible, setLastVisible] = useState(null);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [categories] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedGame, setSelectedGame] = useState(null);
+  const [showAboutPage, setShowAboutPage] = useState(false);
+  const [page, setPage] = useState(0);
+  const initialFetchRef = useRef(false);
+
+  const sortOptions = [
+    { value: 'popularity', label: 'Most Popular' },
+    { value: 'name', label: 'Name (A-Z)' },
+    { value: 'addedDate', label: 'Newly Added' }
+  ];
+
+  const categoryOptions = [
+    { value: '', label: 'All Categories' },
+    ...categories.map(category => ({ value: category, label: category }))
+  ];
 
   const fetchGames = useCallback(async (loadMore = false) => {
+    console.log('Fetching games, loadMore:', loadMore, 'page:', page);
+    if (loading) return;
     setLoading(true);
     try {
       const gamesCollection = collection(db, 'games');
       let q;
-
+  
       if (selectedCategory) {
         if (loadMore && lastVisible) {
           q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(GAMES_PER_PAGE));
@@ -78,57 +64,102 @@ const TurtleInternet = () => {
           q = query(gamesCollection, orderBy(sortOption, 'desc'), limit(GAMES_PER_PAGE));
         }
       }
-
+  
       const snapshot = await getDocs(q);
-      const fetchedGames = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-
+      const storage = getStorage();
+  
+      const fetchedGames = await Promise.all(snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        let imageUrl = data.imageUrl;
+        let gameUrl = data.gameUrl;
+  
+        if (imageUrl && imageUrl.startsWith('gs://')) {
+          try {
+            const imageRef = ref(storage, imageUrl);
+            imageUrl = await getDownloadURL(imageRef);
+          } catch (error) {
+            console.error("Error fetching image URL:", error);
+            imageUrl = '/placeholder-image.jpg'; // Use a placeholder image if fetch fails
+          }
+        }
+  
+        if (data.isEmulator && gameUrl && gameUrl.startsWith('gs://')) {
+          try {
+            const gameRef = ref(storage, gameUrl);
+            gameUrl = await getDownloadURL(gameRef);
+          } catch (error) {
+            console.error("Error fetching game URL:", error);
+          }
+        }
+  
+        return {
+          id: doc.id,
+          ...data,
+          imageUrl,
+          gameUrl,
+          isEmulator: data.isEmulator || false,
+          system: data.system || ''
+        };
+      }));
+  
+      console.log('Fetched games:', fetchedGames.length);
+  
       if (loadMore) {
-        setGames(prevGames => [...prevGames, ...fetchedGames]);
+        setGames(prevGames => {
+          const newGames = [...prevGames, ...fetchedGames];
+          return Array.from(new Map(newGames.map(game => [game.id, game])).values());
+        });
       } else {
         setGames(fetchedGames);
       }
-
+  
       setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === GAMES_PER_PAGE);
+      setHasMore(fetchedGames.length === GAMES_PER_PAGE);
+      if (loadMore) {
+        setPage(prev => prev + 1);
+      }
+      console.log('Has more:', fetchedGames.length === GAMES_PER_PAGE);
     } catch (error) {
       console.error("Error fetching games:", error);
+      if (error.code === 'permission-denied') {
+        console.error("Permission denied. Please check your Firebase security rules.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory, sortOption, lastVisible]);
+  }, [selectedCategory, sortOption, lastVisible, loading, page]);
 
   useEffect(() => {
-    fetchGames();
-  }, [fetchGames, selectedCategory, sortOption]);
-
-
-  const fetchMoreGames = async () => {
-    if (!lastVisible || loading) return;
-    setLoading(true);
-    try {
-      const gamesCollection = collection(db, 'games');
-      let q;
-      
-      if (selectedCategory) {
-        q = query(gamesCollection, where('categories', 'array-contains', selectedCategory), orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(12));
-      } else {
-        q = query(gamesCollection, orderBy(sortOption, 'desc'), startAfter(lastVisible), limit(12));
-      }
-
-      const snapshot = await getDocs(q);
-      const fetchedGames = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-      setGames(prevGames => [...prevGames, ...fetchedGames]);
-      setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
-      setHasMore(snapshot.docs.length === 12);
-    } catch (error) {
-      console.error("Error fetching more games:", error);
-    } finally {
-      setLoading(false);
+    if (!initialFetchRef.current) {
+      console.log('Initial fetch triggered');
+      fetchGames();
+      initialFetchRef.current = true;
     }
-  };
+  }, [fetchGames]);
+
+  useEffect(() => {
+    if (initialFetchRef.current) {
+      console.log('Effect triggered, resetting and fetching games');
+      setLastVisible(null);
+      setGames([]);
+      setPage(0);
+      fetchGames();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, sortOption]);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const categoriesSnapshot = await getDocs(collection(db, 'categories'));
+      const categoriesList = categoriesSnapshot.docs.map(doc => doc.data().name);
+      setCategories(categoriesList);
+    };
+    fetchCategories();
+  }, []);
 
   const handlePlayGame = async (game) => {
-    setCurrentGame(game);
+    console.log('handlePlayGame called', { game });
+    setSelectedGame(game);
     const gameRef = doc(db, 'games', game.id);
     try {
       await updateDoc(gameRef, {
@@ -140,21 +171,54 @@ const TurtleInternet = () => {
     }
   };
 
+  const handleCloseGameDetails = () => {
+    setSelectedGame(null);
+    setCurrentGame(null);
+  };
+
+  const launchGame = (game) => {
+    setCurrentGame(game);
+  };
+
+  const handleCloseGamePopup = () => {
+    setCurrentGame(null);
+    setSelectedGame(null);
+  };
+
+  const toggleAboutPage = () => {
+    setShowAboutPage(!showAboutPage);
+  };
+
+  const fetchMoreGames = () => {
+    console.log('Fetching more games');
+    if (!loading && hasMore) {
+      fetchGames(true);
+    }
+  };
+
+  const WelcomeContent = () => (
+    <div className={`text-center py-8 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+      <h1 className="text-4xl font-bold mb-4">Welcome to Turtle Internet</h1>
+      <p className="text-xl mb-6">Your gateway to a world of fun and exciting games!</p>
+      <div className="max-w-2xl mx-auto">
+        <h2 className="text-2xl font-semibold mb-3">What We Offer:</h2>
+        <ul className="list-disc list-inside text-left">
+          <li>A curated collection of high-quality games</li>
+          <li>Regular updates with new and trending titles</li>
+          <li>Easy-to-use interface for seamless gaming experience</li>
+          <li>Community-driven game recommendations</li>
+        </ul>
+      </div>
+    </div>
+  );
+
   const filteredGames = games.filter(game => 
     game.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     game.categories.some(category => category.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  if (showAdminLogin) {
-    return <AdminLogin setIsAdmin={setIsAdmin} isDarkMode={isDarkMode} setShowAdminLogin={setShowAdminLogin} />;
-  }
-
-  if (isAdmin) {
-    return <AdminPage setIsAdmin={setIsAdmin} isDarkMode={isDarkMode} />;
-  }
-
-  return (
-    <div className={`min-h-screen flex flex-col ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gradient-to-b from-teal-50 to-teal-100'}`}>
+  const renderMainContent = () => (
+    <>
       <header className={`${isDarkMode ? 'bg-gray-800' : 'bg-teal-600'} text-white p-4 shadow-md`}>
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -162,6 +226,12 @@ const TurtleInternet = () => {
             <h1 className="text-2xl font-bold">Turtle Internet</h1>
           </div>
           <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleAboutPage}
+              className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-700 text-white' : 'bg-teal-500 text-white'}`}
+            >
+              <Info size={20} />
+            </button>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-700 text-yellow-300' : 'bg-teal-500 text-white'}`}
@@ -179,61 +249,74 @@ const TurtleInternet = () => {
       </header>
 
       <main className="container mx-auto py-8 px-4 flex-grow">
-        <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              placeholder="Search games or categories..."
-              className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:outline-none focus:ring-2 focus:ring-teal-500`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          </div>
-          <div className="relative w-full sm:w-48">
-            <select
-              className={`w-full appearance-none ${isDarkMode ? 'bg-gray-700 text-white' : 'bg-white'} border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} rounded-lg px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-teal-500`}
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-            >
-              <option value="popularity">Most Popular</option>
-              <option value="name">Name (A-Z)</option>
-              <option value="addedDate">Newly Added</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          </div>
-          <div className="relative w-full sm:w-48">
-            <select
-              className={`w-full appearance-none ${isDarkMode ? 'bg-gray-700 text-white' : 'bg-white'} border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} rounded-lg px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-teal-500`}
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          </div>
-        </div>
+        {showAboutPage ? (
+          <AboutPage isDarkMode={isDarkMode} />
+        ) : (
+          <>
+            {games.length === 0 && !loading && <WelcomeContent />}
+            
+            <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search games or categories..."
+                  id="Search"
+                  className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:outline-none focus:ring-2 focus:ring-teal-500`}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              </div>
+              <div className="w-full sm:w-48">
+                <Dropdown
+                  options={sortOptions}
+                  value={sortOption}
+                  onChange={setSortOption}
+                  placeholder="Sort by"
+                  isDarkMode={isDarkMode}
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <Dropdown
+                  options={categoryOptions}
+                  value={selectedCategory}
+                  onChange={setSelectedCategory}
+                  placeholder="Select category"
+                  isDarkMode={isDarkMode}
+                />
+              </div>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredGames.map((game) => (
-            <GameCard 
-              key={game.id} 
-              game={game}
-              isDarkMode={isDarkMode} 
-              onPlay={handlePlayGame}
-            />
-          ))}
-        </div>
-        
-        {hasMore && !loading && (
-          <button onClick={fetchMoreGames} className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mx-auto block">
-            Load More
-          </button>
+            <InfiniteScroll
+              dataLength={filteredGames.length}
+              next={fetchMoreGames}
+              hasMore={hasMore}
+              loader={<h4 className="text-center mt-4">Loading more games...</h4>}
+              endMessage={
+                <div className="text-center mt-8 mb-4">
+                  <p className={`font-semibold text-lg ${isDarkMode ? 'text-teal-300' : 'text-teal-600'}`}>
+                    You've reached the end of our current game collection.
+                  </p>
+                  <p className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Check back soon for new additions or suggest a game you'd like to see!
+                  </p>
+                </div>
+              }
+              scrollThreshold={0.9}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-hidden">
+                {filteredGames.map((game) => (
+                  <GameCard 
+                    key={game.id} 
+                    game={game}
+                    isDarkMode={isDarkMode} 
+                    onPlay={handlePlayGame}
+                  />
+                ))}
+              </div>
+            </InfiniteScroll>
+          </>
         )}
-        {loading && <p className="text-center mt-4">Loading...</p>}
       </main>
 
       <footer className={`${isDarkMode ? 'bg-gray-800' : 'bg-[#9E9E9E]'} text-white py-6`}>
@@ -256,11 +339,38 @@ const TurtleInternet = () => {
           </div>
         </div>
       </footer>
+    </>
+  );
 
+  return (
+    <div className={`min-h-screen flex flex-col ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gradient-to-b from-teal-50 to-teal-100'}`}>
+      {showAdminLogin && (
+        <AdminLogin
+          setIsAdmin={setIsAdmin}
+          isDarkMode={isDarkMode}
+          setShowAdminLogin={setShowAdminLogin}
+        />
+      )}
+      {isAdmin ? (
+        <AdminPage
+          setIsAdmin={setIsAdmin}
+          isDarkMode={isDarkMode}
+        />
+      ) : (
+        renderMainContent()
+      )}
+      {selectedGame && (
+        <GameDetails
+          game={selectedGame}
+          onPlay={launchGame}
+          onClose={handleCloseGameDetails}
+          isDarkMode={isDarkMode}
+        />
+      )}
       {currentGame && (
         <GamePopup 
           game={currentGame} 
-          onClose={() => setCurrentGame(null)} 
+          onClose = {handleCloseGamePopup}
           isDarkMode={isDarkMode} 
         />
       )}
