@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmulatorJS</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden;
+        }
+        #game {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script>
+        console.log('emulator.html: File loaded');
+    </script>
+</head>
+<body>
+    <div id="game"></div>
+    <script>
+        console.log('emulator.html: Script started');
+
+        window.addEventListener('message', function(event) {
+            console.log('emulator.html: Message received', event.data);
+            const { romUrl, system } = event.data;
+            
+            console.log('emulator.html: ROM URL:', romUrl);
+            console.log('emulator.html: System:', system);
+
+            window.EJS_player = '#game';
+            window.EJS_gameUrl = romUrl;
+            window.EJS_core = system;
+            window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+            window.EJS_startOnLoaded = true;
+
+            console.log('emulator.html: EmulatorJS configuration set');
+
+            const script = document.createElement('script');
+            script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
+            script.onload = function() {
+                console.log('emulator.html: EmulatorJS loader script loaded');
+            };
+            script.onerror = function(error) {
+                console.error('emulator.html: Error loading EmulatorJS loader script:', error);
+            };
+            document.body.appendChild(script);
+
+            console.log('emulator.html: EmulatorJS loader script appended to body');
+        }, false);
+
+        console.log('emulator.html: Message listener set up');
+    </script>
+</body>
+</html>
